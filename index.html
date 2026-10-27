@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>WORDTETRIS</title>
+<style>
+  :root {
+    --bh: min(86vh, 720px);
+    --green: #6aaa64;
+    --yellow: #c9b458;
+    --purple: #8b7be8;
+    --tile: #3a3a3c;
+    --tile-b: #565758;
+    --bg: #121213;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: #e6e6e6;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 0%, #1e1e22 0%, #121213 60%);
+  }
+
+  #app { display: flex; gap: 16px; align-items: flex-start; }
+
+  #boardWrap {
+    padding: 7px;
+    background: #1a1a1b;
+    border-radius: 14px;
+    box-shadow: 0 14px 50px rgba(0,0,0,.65), inset 0 0 0 1px rgba(255,255,255,.05);
+    touch-action: none;
+  }
+
+  #board {
+    position: relative;
+    height: var(--bh);
+    width: calc(var(--bh) * 7 / 12);
+    font-size: calc(var(--bh) / 24);
+    border-radius: 9px;
+    background:
+      repeating-linear-gradient(to right, transparent 0 calc(100%/7 - 1px), rgba(255,255,255,.03) calc(100%/7 - 1px) calc(100%/7)),
+      repeating-linear-gradient(to bottom, transparent 0 calc(100%/12 - 1px), rgba(255,255,255,.03) calc(100%/12 - 1px) calc(100%/12));
+    background-color: #141415;
+    overflow: hidden;
+  }
+
+  #grid {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(12, 1fr);
+  }
+
+  .cell { position: relative; }
+  .block {
+    position: absolute; inset: 2px;
+    border-radius: 6px;
+    display: grid; place-items: center;
+    font-weight: 800;
+    line-height: 1;
+    transition: background-color .12s, color .12s;
+  }
+  .block.filled {
+    background: var(--tile);
+    box-shadow: inset 0 0 0 1.5px var(--tile-b);
+    color: #fff;
+  }
+  .block.vowel { color: var(--yellow); }
+
+  /* direction-coloured clearing */
+  .block.clearing { animation: pop .3s ease; }
+  .block.clearing.h {
+    background: var(--green);
+    box-shadow: 0 0 16px rgba(106,170,100,.95), inset 0 0 0 1.5px #8fd08a;
+    color: #fff;
+  }
+  .block.clearing.v {
+    background: var(--yellow);
+    box-shadow: 0 0 16px rgba(201,180,88,.95), inset 0 0 0 1.5px #e6d27a;
+    color: #1a1a1b;
+  }
+  .block.clearing.d {
+    background: var(--purple);
+    box-shadow: 0 0 16px rgba(139,123,232,.95), inset 0 0 0 1.5px #b3a7f5;
+    color: #fff;
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  #piece {
+    position: absolute;
+    padding: 2px;
+    width: calc(100% / 7);
+    height: calc(100% / 12);
+    pointer-events: none;
+    z-index: 5;
+  }
+  #piece .block {
+    position: static;
+    width: 100%; height: 100%;
+    background: #f0f0f2;
+    color: #121213;
+    box-shadow: 0 0 22px rgba(255,255,255,.4), inset 0 0 0 1.5px #fff;
+  }
+  #piece .block.vowel { color: #8a6d00; }
+
+  /* popup */
+  #popup {
+    position: absolute; left: 50%; top: 38%;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; gap: 5px; align-items: center;
+    pointer-events: none; opacity: 0; z-index: 8;
+  }
+  #popup.show { animation: popupAnim 1.15s cubic-bezier(.2,.9,.3,1) forwards; }
+  @keyframes popupAnim {
+    0%   { opacity: 0; transform: translate(-50%,-30%) scale(.6); }
+    18%  { opacity: 1; transform: translate(-50%,-50%) scale(1.08); }
+    70%  { opacity: 1; transform: translate(-50%,-58%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-90%) scale(.95); }
+  }
+  .word-row { display: flex; gap: 3px; }
+  .wcell {
+    width: 1.4em; height: 1.4em;
+    font-size: .78em;
+    display: grid; place-items: center;
+    color: #fff; font-weight: 800;
+    border-radius: 4px;
+  }
+  .wcell.h { background: var(--green); box-shadow: 0 3px 12px rgba(106,170,100,.5); }
+  .wcell.v { background: var(--yellow); color: #1a1a1b; box-shadow: 0 3px 12px rgba(201,180,88,.5); }
+  .wcell.d { background: var(--purple); box-shadow: 0 3px 12px rgba(139,123,232,.5); }
+  .pts {
+    font-size: .6em; font-weight: 800; letter-spacing: 1px;
+    color: var(--yellow); text-shadow: 0 2px 10px rgba(201,180,88,.5);
+  }
+
+  /* overlay */
+  #overlay {
+    position: absolute; inset: 0;
+    background: rgba(18,18,19,.93);
+    border-radius: 9px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    z-index: 20;
+    text-align: center; padding: 14px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 { margin: 0; font-size: 1.1em; letter-spacing: 3px; color: #fff; }
+  #overlay p { margin: 0; font-size: .68em; color: #9a9a9e; }
+  #overlay .big { font-size: 1.8em; font-weight: 800; color: var(--green); }
+  button {
+    font-family: inherit; font-weight: 800; letter-spacing: 1px;
+    font-size: .62em; padding: 11px 18px; border-radius: 8px;
+    background: var(--green); color: #fff; border: none;
+    cursor: pointer; transition: transform .1s, background .1s;
+  }
+  button:hover { background: #7cbb76; }
+  button:active { transform: scale(.95); }
+
+  /* sidebar */
+  #sidebar {
+    display: flex; flex-direction: column; gap: 10px;
+    width: 132px;
+    padding-top: 2px;
+  }
+  .stat, .next, .legend {
+    background: #1a1a1b;
+    border-radius: 10px;
+    padding: 8px 10px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  .stat label, .next label, .legend label {
+    display: block;
+    font-size: 9px; letter-spacing: 1.6px;
+    color: #7d7d82; font-weight: 700; margin-bottom: 3px;
+  }
+  .stat div { font-size: 20px; font-weight: 800; color: #fff; line-height: 1.1; }
+  #queue { display: flex; gap: 4px; flex-wrap: wrap; }
+  .qtile {
+    width: 24px; height: 24px; border-radius: 5px;
+    display: grid; place-items: center;
+    background: var(--tile); color: #fff;
+    font-weight: 800; font-size: 14px;
+    box-shadow: inset 0 0 0 1.5px var(--tile-b);
+  }
+  .qtile.vowel { color: var(--yellow); }
+  .qtile:first-child {
+    background: #4a4a4d;
+    box-shadow: inset 0 0 0 1.5px #8a8a90, 0 0 10px rgba(255,255,255,.14);
+  }
+  .legend .row {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; color: #9a9aa0; margin: 3px 0;
+  }
+  .legend .dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+  .hint {
+    font-size: 9.5px; color: #6a6a70; line-height: 1.55;
+    letter-spacing: .3px; padding: 0 3px;
+  }
+  .hint b { color: #9a9aa0; }
+  .btnrow { display: flex; gap: 6px; }
+  .btnrow button { flex: 1; font-size: 10px; padding: 9px 4px; }
+  #muteBtn { background: #2a2a2d; box-shadow: inset 0 0 0 1px #454548; }
+  #muteBtn:hover { background: #35353a; }
+
+  /* definitions panel */
+  #defsPanel {
+    width: 306px;
+    height: var(--bh);
+    display: flex; flex-direction: column;
+    background: #1a1a1b;
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+    padding: 10px 12px;
+  }
+  #defsPanel > label {
+    font-size: 9px; letter-spacing: 2px; color: #7d7d82;
+    font-weight: 700; margin-bottom: 8px;
+  }
+  #defs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; padding-right: 4px; }
+  #defs::-webkit-scrollbar { width: 5px; }
+  #defs::-webkit-scrollbar-thumb { background: #3a3a3c; border-radius: 3px; }
+  .def-entry {
+    border-left: 3px solid #3a3a3c;
+    padding: 2px 0 2px 8px;
+    animation: fadeUp .35s ease;
+  }
+  .def-entry.h { border-left-color: var(--green); }
+  .def-entry.v { border-left-color: var(--yellow); }
+  .def-entry.d { border-left-color: var(--purple); }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  .def-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+  .wchip {
+    font-weight: 800; font-size: 12px; letter-spacing: 1px;
+    padding: 2px 7px; border-radius: 4px; color: #fff;
+  }
+  .wchip.h { background: var(--green); }
+  .wchip.v { background: var(--yellow); color: #1a1a1b; }
+  .wchip.d { background: var(--purple); }
+  .def-pos { font-size: 9px; color: #7d7d82; font-style: italic; }
+  .def-text { font-size: 11.5px; color: #b9b9be; line-height: 1.4; }
+  .empty-defs { font-size: 11px; color: #5c5c61; line-height: 1.5; }
+
+  /* touch controls */
+  #touch {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: none;
+    gap: 8px; padding: 10px 12px 16px;
+    justify-content: center;
+    background: linear-gradient(to top, rgba(18,18,19,.98), rgba(18,18,19,0));
+    z-index: 30;
+  }
+  #touch button {
+    flex: 1; max-width: 80px; padding: 15px 0; font-size: 17px;
+    background: #2a2a2d; box-shadow: inset 0 0 0 1px #454548;
+  }
+  #touch button:active { background: #3a3a3e; }
+
+  @media (pointer: coarse) {
+    #touch { display: flex; }
+    body { align-items: flex-start; padding-top: 8px; }
+    :root { --bh: min(58vh, 430px); }
+  }
+  @media (max-width: 1000px) {
+    #app { flex-wrap: wrap; justify-content: center; }
+    #defsPanel { width: min(94vw, 620px); height: 132px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="boardWrap">
+    <div id="board">
+      <div id="grid"></div>
+      <div id="piece"><div class="block"></div></div>
+      <div id="popup"></div>
+      <div id="overlay" class="hidden">
+        <h2>GAME OVER</h2>
+        <div class="big" id="finalScore">0</div>
+        <p>FINAL SCORE</p>
+        <button id="again">PLAY AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+  <aside id="sidebar">
+    <div class="stat"><label>SCORE</label><div id="score">0</div></div>
+    <div class="stat"><label>LEVEL</label><div id="level">1</div></div>
+    <div class="stat"><label>WORDS</label><div id="words">0</div></div>
+    <div class="next"><label>NEXT</label><div id="queue"></div></div>
+    <div class="legend">
+      <label>WORDS</label>
+      <div class="row"><span class="dot" style="background:var(--green)"></span>horizontal</div>
+      <div class="row"><span class="dot" style="background:var(--yellow)"></span>vertical</div>
+      <div class="row"><span class="dot" style="background:var(--purple)"></span>diagonal</div>
+    </div>
+    <div class="hint">
+      <b>←→</b> move<br>
+      <b>↓</b> soft drop<br>
+      <b>SPACE</b> hard drop<br>
+      <b>S</b> swap letter<br>
+      <b>P</b> pause
+    </div>
+    <div class="btnrow">
+      <button id="muteBtn" title="Toggle sound">🔊</button>
+      <button id="restart">RESET</button>
+    </div>
+  </aside>
+
+  <aside id="defsPanel">
+    <label>WORD MEANINGS</label>
+    <div id="defs">
+      <div class="empty-defs">Clear a word and its definition appears here.</div>
+    </div>
+  </aside>
+</div>
+
+<div id="touch">
+  <button data-act="left">◀</button>
+  <button data-act="swap">⇄</button>
+  <button data-act="down">▼</button>
+  <button data-act="drop">DROP</button>
+  <button data-act="right">▶</button>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ============================== WORD LIST ============================== */
+  const RAW = `
+  ace act add ado aft age ago aid ail aim air ale all and ant any ape apt arc are ark arm art ash ask asp ate awe axe aye
+  bad bag ban bar bat bay bed bee beg bet bib bid big bin bit boa bob bog boo bow box boy bra bud bug bum bun bus but buy
+  cab cad cam can cap car cat caw cob cod cog con coo cop cot cow coy cry cub cue cup cur cut
+  dab dad dam day den dew did die dig dim din dip doe dog don dot dry dub dud due dug duo dye
+  ear eat ebb eel egg ego eke elf elk elm emu end era err eve ewe eye
+  fad fan far fat fax fed fee fen few fib fig fin fir fit fix flu fly foe fog for fox fry fun fur
+  gag gal gap gas gel gem get gig gin got gum gun gut guy gym
+  had hag ham has hat haw hay hem hen her hew hex hey hid him hip his hit hob hoe hog hop hot how hub hue hug hum hut
+  ice icy ill imp ink inn ion ire irk its ivy
+  jab jag jam jar jaw jay jet jib jig job jog jot joy jug jut
+  keg key kid kin kit
+  lab lad lag lap law lax lay led leg lei let lid lie lip lit lob log lot low lug lye
+  mad map mar mat maw may men met mew mid mix mob mod mom mop mow mud mug mum
+  nab nag nap net new nib nil nip nit nod nor not now nub nun nut
+  oak oar oat odd ode off oft oil old one opt orb ore our out owe owl own ox
+  pad pal pan par pat paw pay pea peg pen per pet pew pie pig pin pit ply pod pop pot pow pro pry pub pug pun pup put
+  rag ram ran rap rat raw ray red ref rev rib rid rig rim rip rob rod roe rot row rub rue rug rum run rut rye
+  sac sad sag sap sat saw say sea see set sew she shy sip sir sit six ski sky sly sob sod son sow soy spa spy sub sue sum sun sup
+  tab tad tag tan tap tar tax tea tee ten the thy tic tie tin tip toe ton too top tot tow toy try tub tug tux two
+  urn use van vat vet vex via vie vow
+  wad wag war was wax way web wed wee wet who why wig win wit woe wok won woo wow wry
+  yak yam yap yaw yea yen yes yet yew yip yon you
+  zap zen zip zoo
+
+  able ache acid acre aged agog aide ajar akin alas ally aloe also alto amid ammo anew ante apex arch area arid army arts atom aunt auto aver avid awed awry axis
+  babe baby back bade bags bail bait bake bald bale ball balm band bane bang bank bare bark barn bars base bash bask bath bats bead beak beam bean bear beat beds beef been beep beer bees beet bell belt bend bent best bets bias bide bike bile bill bind bird bite bits blab bled blew blip blob bloc blot blow blue blur boar boat body boil bold bolt bomb bond bone book boom boon boot bore born boss both bout bowl brag bran brat bray bred brew brie brim brow buds buff bugs bulb bulk bull bump bunk buns bunt buoy burp bury bush bust busy butt buys buzz byte
+  cabs cafe cage cake calf call calm came camp cane cape caps card care carp cars cart case cash cask cast cats cave cell cent chap char chat chef chew chic chin chip chop chub chug cite city clad clam clan clap claw clay clip clod clog clot club clue coal coat coax code coil coin coke cold colt comb come cone cook cool coop cope cops copy cord core cork corn cost cove cowl cows cozy crab crag cram crew crib crow cube cubs cuff cull cult curb cure curl curt cusp cute cuts cyan
+  dabs dado daft dame damp dare dark darn dart dash data date daub dawn days daze dead deaf deal dean dear debt deck deed deem deep deer deft defy deli dell demo dens dent deny desk dial dice diet dime dine dire dirt disc dish disk dive dock dodo does doff dogs dome done doom door dope dose dote dots dour dove down doze drab drag dram draw drew drip drop drum dual duck dude duds duel dues duet duke dull duly dumb dump dune dunk dusk dust duty dyed dyes
+  each earl earn ears ease east easy eats eave echo edge edit eels eggs egos elks else emit ends envy epic even ever evil exam exit eyed eyes
+  face fact fade fads fail fair fake fall fame fang fans fare farm fast fate fats fawn fear feat feed feel fees feet fell felt fend fern feud figs file fill film find fine fins fire firm fish fist fits five fizz flag flap flat flaw flax flea fled flee flew flex flip flit flog flow flue foal foam foes fogs fold folk fond font food fool foot ford fore fork form fort foul four fowl foxy frag fray free frog from fuel full fume fund funk furl fury fuse fuss fuzz
+  gain gala gale gall game gang gape gaps garb gash gasp gate gave gawk gaze gear geek gems gene gent germ gets gift gild gill gilt gird girl gist give glad glee glen glib glob glow glue glum glut gnat gnaw goad goal goat gobs gods goes gold golf gone gong good goof gore gory gout gown grab gram gray grew grey grid grim grin grip grit grow grub gulf gull gulp gums gunk guns guru gush gust guts guys
+  hack hail hair hake hale half hall halo halt hand hang hard hare hark harm harp hash hate hats haul have hawk hays haze hazy head heal heap hear heat heck heed heel heft heir held helm help hemp hens herb herd here hero hers hewn hick hide high hike hill hilt hind hint hips hire hiss hits hive hoax hobo hock hoed hogs hold hole holy home hone honk hood hoof hook hoop hoot hope hops horn hose host hour howl hubs hues huge hugs hulk hull hump hung hunt hurl hurt hush husk huts hymn hype
+  ices icky icon idea idle idol iffy ills imps inch info inks inky inns into ions iota iris irks iron isle itch item
+  jabs jack jade jail jamb jams jars java jaws jays jazz jeep jeer jell jerk jest jets jibe jigs jilt jinx jive jobs jock jogs john join joke jolt jowl joys judo jugs jump junk jury just juts
+  kale keel keen keep kegs kelp kept keys kick kids kill kiln kilt kind king kink kiss kite kits kiwi knee knew knit knot know
+  lace lack lacy lads lady laid lain lair lake lamb lame lamp land lane lank laps lard lark lash lass last late lath laud lava lawn laws lays lazy lead leaf leak lean leap left legs lend lens lent less lest lets levy liar libs lice lick lids lied lien lies life lift like lilt lily limb lime limp line link lint lion lips lisp list live load loaf loam loan lobe lobs lock loft logo logs loin lone long look loom loop loot lord lore lose loss lost lots loud love lows luck lugs lull lump lung lure lurk lush lust lute lynx
+  mace made maid mail maim main make male mall malt mane many maps mare mark mars mash mask mass mast mate math mats maul maze mead meal mean meat meek meet meld melt memo mend menu meow mere mesh mess mice mild mile milk mill mind mine mini mink mint mire miss mist mite moan moat mock mode mold mole moms monk mood moon moor moot mope more morn moss most moth move mown much muck mugs mule mull muse mush musk must mute mutt myth
+  nail name nape naps nave navy near neat neck need neon nest nets news newt next nice nick nigh nine nips node nods none nook noon norm nose nosy note noun nova nude nuke null numb nuns nuts
+  oaks oars oath oats obey odds odes odor ogle ogre oils oily okay okra omen omit once ones only onto onyx ooze opal open opts oral orbs orca ores oust oval oven over owes owls owns oxen
+  pace pack pact pads page paid pail pain pair pale palm pane pang pans pant papa pare park part pass past pate path pats pave pawn paws pays peak peal pear peas peat peck peek peel peep peer pegs pelt pens pent peon perk perm pert pest pets pick pied pier pies pigs pike pile pill pine ping pink pins pint pipe pits pity plan play plea pled plot plow ploy plug plum plus pods poem poet poke pole poll polo pond pony pool poor pope pops pore pork port pose posh post pots pour pout pray prep prey prim prod prom prop pros prow pubs puck puff pull pulp puma pump punk punt pups pure purr push puts putt pyre
+  quad quay quit quiz
+  race rack racy raft rage rags raid rail rain rake ramp rang rank rant rape rapt rare rash rasp rate rats rave rays raze read real ream reap rear reds reed reef reek reel refs rein rely rend rent rest revs ribs rice rich ride rife rift rigs rims rind ring rink riot ripe rise risk rite road roam roar robe robs rock rode rods role roll romp roof rook room root rope rose rosy rote rout rove rows rubs rude rugs ruin rule rump rung runs runt ruse rush rust ruts
+  sack safe saga sage said sail sake sale salt same sand sane sang sank sash save sawn saws says scan scar seal seam sear seas seat sect seed seek seem seen seep seer sees self sell semi send sent sets sewn shed shim shin ship shod shoe shop shot show shun shut sick side sift sigh sign silk sill silo silt sing sink sins sips sire site sits size skew skid skim skin skip skis slab slam slap slat slaw sled slew slid slim slip slit slob slog slop slot slow slug slum slur smog smug snag snap snip snob snow snub snug soak soap soar sobs sock soda sofa soft soil sold sole solo some song sons soon soot sore sort soul soup sour sown sows spam span spar spat spec sped spew spin spit spot spry spud spun spur stab stag star stay stem step stew stir stop stow stub stud stun subs such suds sues suit sulk sums sung sunk suns sure surf swab swam swan swap swat sway swig swim swum sync
+  tabs tack taco tact tags tail take talc tale talk tall tame tamp tang tank tans tape taps tarp tart task taut teak teal team tear teas tech teem teen tell tend tens tent term tern test text than that thaw thee them then they thin this thus tick tide tidy tied tier ties tile till tilt time tine tint tiny tips tire toad toes tofu toga togs toil told toll tomb tome tone tons took tool toot tops tore torn tort toss tote tots tour tout town tows toys tram trap tray tree trek trim trio trip trod trot true tuba tube tubs tuck tuft tugs tuna tune turf turn tusk tutu twig twin twit type typo
+  ugly undo unit unto upon urge urns used user uses
+  vain vale vane vans vase vast vats veal veer veil vein vend vent verb very vest veto vets vial vibe vice vied vies view vile vine visa vise void volt vote vows
+  wade wads wage waft wags waif wail wait wake walk wall wand wane want ward ware warm warn warp wars wart wary wash wasp watt wave wavy waxy ways weak wean wear webs weds weed week weep weld well welt went wept were west wets wham what when whet whey whim whip whir whiz whoa whom wick wide wife wigs wild will wilt wily wind wine wing wink wins wipe wire wiry wise wish wisp with wits woke wolf womb wood wool word wore work worm worn wove wrap wren writ
+  yack yaks yams yang yank yard yarn yawn yeah year yell yelp yews yoga yoke yolk yore your yowl yule
+  zeal zero zest zinc zing zips zone zoom zoos
+
+  aback abase abate abbey abbot abhor abide abode abort about above abuse abyss ached acids acorn acres acrid acted actor acute adapt added adept adieu admit adobe adopt adore adorn adult affix afire afoot afoul after again agape agate agent agile aging aglow agony agree ahead aided aides aisle alarm album alert algae alias alibi alien align alike alive alley allot allow alloy aloft alone along aloof aloud alpha altar alter amass amaze amber amble amend amiss amity among ample amply amuse angel anger angle angry angst anime ankle annex annoy anvil apart aphid aping apple apply apron aptly arbor ardor arena argue arise armed armor aroma arose array arrow arson ascot ashen aside askew assay asset atlas atoll atone attic audio audit avail avert avian avoid await awake award aware awash awful awoke axial axiom azure
+  babel bacon badge badly bagel baggy baker baler balmy banal banjo barge baron basal basic basil basin basis baste batch bathe baton bawdy bayou beach beads beady beams beans beard beast beats beech beefy beers befit began beget begin begun being belch belie belle belly below belts bench bends berry berth beset bevel bezel bible bicep biddy bigot bilge billy binge bingo biome birch birds birth bison bites black blade blame bland blank blare blast blaze bleak bleat bleed bleep blend bless blimp blind blink bliss blitz bloat block blond blood bloom blown blues bluff blunt blurb blurt blush board boast bobby bogus boils bolts bonds boned bones bonus booby boost booth boots booze borax bored borne boron bosom bossy botch bough bound bowel bower boxer brace braid brain brake brand brash brass brave bravo brawl brawn bread break breed briar bribe brick bride brief brine bring brink briny brisk broad broil broke brook broom broth brown brunt brush brute buddy budge buggy bugle build built bulge bulky bully bunch bunny burly burnt burst bushy butch butte buxom buyer bylaw
+  cabal cabin cable cacao cache cacti caddy cadet cagey camel cameo canal candy canes canny canoe canon caper carat cards cared carer cares cargo carol carry carts carve caste catch cater catty cause cease cedar cello chafe chaff chain chair chalk champ chant chaos chard charm chart chase chasm cheap cheat check cheek cheer chess chest chick chide chief child chili chill chime chimp china chirp chock choir choke chomp chops chord chore chose chuck chump chunk churn chute cider cigar cinch circa cited cites civic civil clack claim clamp clang clank clash clasp class clean clear cleat clerk click cliff climb cling clink cloak clock clone close cloth cloud clout clove clown cluck clump clung coach coast cobra cocoa colon color colts comet comfy comic comma conch condo cones conic copse coral corks corny corps couch cough could count coupe court cover covet covey crabs crack craft cramp crane crank crash crass crate crave crawl craze crazy creak cream credo creed creek creep creme crepe crept crest cried crier crime crimp crisp croak crock crone crony crook cross crowd crown crude cruel crumb crush crust crypt cubic cumin curbs curds cured curio curly curry curse curve curvy cyber cycle cynic
+  daddy daily dairy daisy dally dance dandy datum daunt dealt death debar debit debug debut decal decay decor decoy decry defer delay delta delve demon demur denim dense depot depth derby deter detox deuce devil diary dicey digit dimly diner dingo dingy dirge dirty disco ditch ditto ditty diver divot dizzy docks dodge dodgy doing dolly donor donut doubt dough dowdy dowel downy dowry dozen draft drain drake drama drank drape drawl drawn dread dream dregs dress dried drier drift drill drink drive droll drone drool droop drops dross drove drown druid drums drunk dryer dryly dully dummy dumpy dunce dunes dupes dusky dusty dutch duvet dwarf dwell dwelt dying
+  eager eagle early earns earth easel eaten eater ebony edict edify eerie egret eight eject elate elbow elder elect elegy elite elope elude email embed ember emcee empty enact ended endow enemy enjoy ennui ensue enter entry envoy epoch epoxy equal equip erase erect erode error erupt essay ether ethic ethos evade event every evict evoke exact exalt excel exert exile exist expel extol extra exult eying
+  fable faced faces facet faded fails faint fairy faith falls false famed fancy fangs farce fatal fated fatty fault fauna favor feast feats feign fella felon femur fence feral ferry fetal fetch fetid fever fewer fiber field fiend fiery fifth fifty fight filed filer files filet filly filmy filth final finch finds fined finer fires firms first fishy fists fixed fixer fizzy fjord flail flair flake flaky flame flank flaps flare flash flask fleas fleck flees fleet flesh flick flier flies fling flint flirt float flock flood floor flora floss flour flout flown fluff fluid fluke flung flunk flush flute flyer foamy focal focus foggy foist folio folks folly fonts foods fools foray force forge forgo forks forms forte forth forty forum found fount fours fowls foxes foyer frail frame frank fraud freak freed freer fresh friar fried frill frisk frock frond front frost froth frown froze fruit fudge fuels fully fumes funds fungi funky funny furor fused fussy fuzzy
+  gable gaily gains galas gales gamma gamut gases gasps gassy gated gates gauge gaunt gauze gavel gawky gazed gazer gecko geeks geese genes genie genre gents germs ghost ghoul giant giddy gifts girls girth given giver gizmo glade gland glare glass glaze gleam glean glide glint gloat globe gloom glory gloss glove glued glues glyph gnarl gnash gnome godly going golem golly gonad goner goods goose gorge gorse gouge gourd grabs grace grade graft grail grain grand grant grape graph grasp grass grate grave gravy graze great greed green greet grief grill grime grimy grind gripe grips grist groan groin groom grope gross group grout grove growl grown gruel gruff grunt guard guava guess guest guide guild guile guilt guise gulch gulls gully gumbo gummy gusto gusty gutsy gypsy
+  habit hacks hairy halls halve handy hangs hanky happy hardy harem harms harsh haste hasty hatch hated hater haunt haven havoc hazel heads heady heals heaps heard heart heath heave heavy hedge heeds heels hefty heist helix hello helps hence herbs herds heron hertz hilly hinge hints hippo hippy hired hirer hitch hoard hoary hobby hoist holds holed holes holly homer homes homey honed honey honor hoods hooks hoped hopes horde horns horse hosts hotel hound hours house hovel hover howdy human humid humor humps hunch hunks hunts hurls hurry hurts husky hutch hydro hyena hymns hyper
+  icing ideal ideas idiom idiot idled idler idols igloo image imbue impel imply inane inbox incur index inept inert infer ingot inked inlet inner input inset inter intro irate irked irony islet issue itchy items ivory
+  jaunt jazzy jeans jeeps jelly jerky jetty jewel jiffy joint joist joker jolly joust judge juice juicy jumbo jumps jumpy junky junta juror
+  kappa karma kayak kneel knees knelt knife knits knobs knock knoll knots known knows koala kraft krill
+  label labor laced laces lacks laden ladle lager laity lakes lambs lamps lance lands lanes lanky lapel lapse large larva laser lasso lasts latch later lathe latte laugh layer leach leads leafy leaks leaky leans leaps learn lease leash least leave ledge leech leeks leers lefty legal legit lemon lemur lends leper level lever liars libel liege liens lifts light liked liken likes lilac limbo limit lined linen liner lines lingo links lions liter litre lived liver lives livid llama loads loamy loans loath lobby local locks locus lodge lofts lofty logic login logos loins lolly loner longs looks looms loons loops loose loots lorry loser loses lotus louse lousy loved lover loves lower lowly loyal lucid lucky lulls lumen lumps lumpy lunar lunch lunge lured lures lurid lusty lying lymph lyric
+  macho macro madam madly mafia magic magma maids mails maize major maker makes malls malts manga mango mangy mania manic manly manor maple march mares marks marry marsh masks mason match mates matte mauve maven maxim mayor meals means meant meaty medal media medic meets melon melts memes memos mends menus mercy merge merit merry messy metal meter metro micro midge midst might miles milky mills mimic mince minds mined miner mines mints minty minus mirth misty mites mixed mixer moans moats mocha mocks modal model modem modes moist molar molds moldy moles money monks month moody moons moors moose moped moral moray morel morph morse mosey mossy motel moths motif motor motto mould mound mount mourn mouse mousy mouth moved mover moves movie mower mucky mucus muddy muggy mulch mules mummy mumps munch mural murky mushy music musky musty muted mutes mutts myrrh myths
+  nadir naive naked named names nanny nasal nasty naval navel needs needy nerdy nerve nervy nests never newer newly newts nexus nicer niche niece nifty night ninja ninth nippy nitro noble nobly nodal nodes noise noisy nomad nooks noons noose norms north nosey notch noted notes nouns novel nudge nurse nutty nylon nymph
+  oaken oases oasis oaths obese occur ocean octal octet odder oddly odium offal offer often oiled okapi olden older oldie olive omega omens omits onset opals opens opera opine opium optic orate orbit order organ other otter ought ounce ousts outdo outer outgo ovals ovary ovens overt ovoid owing oxbow oxide ozone
+  paced paces packs pacts paddy paged pages pagan pails pains paint pairs palsy panda panel pangs panic pansy pants papal paper parch parks parry parse parts party pasta paste pasty patch paths patio patsy patty pause paved paves pawns payee payer peace peach peaks pearl pears peats pecan pedal peels peers pelts penal pence penne penny peony peppy perch peril perks perky pesky pesto petal petty phase phone phony photo piano picks picky piece piety piggy piled piles pills pilot pinch pined pines pings pinky pints pinup pious piped piper pipes pique pitch pithy pivot pixel pizza place plaid plain plait plane plank plans plant plate playa plays plaza plead pleas pleat plied plots plows pluck plugs plumb plume plump plums plunk plush poach poems poets point poise poked poker pokes polar poles polio polka polls polos polyp ponds pooch poppy porch pored pores ports posed poser poses posit posse posts potty pouch pound pours pouts power prank prawn prays preen press price prick pride pried prime primo print prior prism privy prize probe prone prong proof props prose proud prove prowl proxy prude prune psalm pubic pudgy puffy pulls pulpy pulse pumas punch pupil puppy puree purer purge purse pushy putty pygmy
+  quack quads quail quake qualm quark quart quash quasi queen queer quell query quest queue quick quiet quill quilt quips quirk quite quits quota quote quoth
+  rabbi rabid raced racer races racks radar radio radix rafts raged rages raids rails rains rainy raise rally ramps ranch randy range rangy ranks rapid rarer ratio ratty raven ravel razor reach react reads ready realm reaps rearm rebar rebel rebus rebut recap recur redid redo reeds reefs reeks reels refer refit regal reign reins relax relay relic remit renal renew repay repel reply reset resin retch retry reuse revel revue rhino rhyme rider rides ridge rifle rifts right rigid rigor riled riles rimed rimes rings rinks rinse riots ripen riper risen riser risks risky rites rival riven river rivet roach roads roams roast robed robes robin rocks rocky rodeo roger rogue roles rolls roman rooms roomy roost roots ropes rotor rouge rough round rouse roust route rover rowdy royal ruble ruddy ruder ruins ruled ruler rules rumba rumor runes rungs runts rural ruses rusty
+  saber sacks sadly safer safes sails saint salad sales sally salon salsa salts salty salve salvo samba sandy saner sappy sassy satin satyr sauce saucy sauna saved saver saves savor savvy sawed scald scale scalp scaly scamp scans scant scare scarf scary scene scent scion scoff scold scoop scoot scope score scorn scout scowl scram scrap screw scrub scuba scuff seals seams seamy sedan seedy seeks seems seeps seers seize sells sends sense sepia serfs serge serum serve setup seven sever sewer shack shade shady shaft shake shaky shale shall shame shank shape shard share shark sharp shave shawl sheaf shear sheds sheen sheep sheer sheet shelf shell shift shine shiny ships shire shirk shirt shoal shock shone shook shoot shore shorn short shots shout shove shown showy shrub shrug shunt shush shyly sided sides sidle siege sieve sifts sighs sight sigma signs silks silky silly silos since sinew singe sings sinks siren sissy sites sixth sixty sized sizes skate skids skied skier skies skiff skill skimp skins skirt skulk skull skunk slabs slack slain slake slang slant slaps slash slate slave slays sleds sleek sleep sleet slept slice slick slide slime slimy sling slink slope slops slosh sloth slump slung slunk slurp slush slyly small smart smash smear smell smelt smile smirk smite smith smock smoke smoky snack snail snake snaky snaps snare snarl sneak sneer snide sniff snipe snips snobs snoop snore snort snout snows snowy snuck snuff soapy sober soggy soils solar soles solid solve sonar songs sonic sooth sooty sorry sorts souls sound south space spade spank spare spark spasm spawn speak spear speck speed spell spend spent sperm spice spicy spied spiel spike spiky spill spilt spine spiny spire spit spite spits splat split spoil spoke spoof spook spool spoon spore sport spots spout spray spree sprig spuds spunk spurn spurt squad squat squib stack staff stage stags staid stain stair stake stale stalk stall stamp stand stank stare stark stars start state stave stays steak steal steam steed steel steep steer stems stern stick stiff still stilt sting stink stint stock stoic stoke stole stomp stone stony stood stool stoop store stork storm story stout stove strap straw stray strip strut stuck study stuff stump stung stunk stunt style suave sugar suing suite suits sulky sully sumac sunny super surer surge surly sushi swami swamp swarm swath swear sweat sweep sweet swell swept swift swill swine swing swipe swirl swish swoon swoop sword swore sworn swung synod syrup
+  table taboo tacit tacky taffy tails taint taken taker takes tales talks tally talon tango tangy tanks taped taper tapir tardy tarot tarts tasks taste tasty taunt tawny taxed taxes teach teams tears tease teddy teems teens teeth telly tempo tempt tends tenet tenor tense tenth tents tepee tepid terms terse tests testy thane thank theft their theme there these thick thief thigh thine thing think third thong thorn those three threw throb throw thrum thumb thump thyme tiara tibia tidal tides tiger tight tiled tiles tilts timed timer times timid tipsy tired tires titan tithe title toads toast today toddy token tolls tombs tonal toned toner tones tongs tonic tools tooth topaz topic torch torso total totem touch tough tours towel tower towns toxic toxin trace track tract trade trail train trait tramp traps trash trawl trays tread treat trees trend triad trial tribe trick tried tries trill trims trite troll troop trope trots trout truce truck truer truly trump trunk truss trust truth tryst tubas tubby tubes tucks tufts tulip tumor tunas tuned tuner tunes tunic turfs turns tutor twang tweak tweed tweet twice twine twins twirl twist tying typos
+  udder ulcer ultra umbra unbar uncle uncut under undid undue unfit unify union unite unity unlit unmet untie until unwed unzip upend upper upset urban urged urges urine usage users usher using usual usurp utter
+  vague valet valid valor value valve vapid vapor vault vaunt veers vegan veils veins veldt venal vends venom vents venue verbs verge verse verso verve vests vials vibes vicar video vigil vigor viler villa vinyl viola viper viral virus visas visit visor vista vital vivid vixen vocal vodka vogue voice voids volts vomit voter votes vouch vowed vowel vroom
+  wacky wafer wager wages wagon waist waits waive waked waken wakes walks walls waltz wands waned wanes wants wards wares warms warns warps warts wasps waste watch water watts waved waver waves waxen weary weave wedge weeds weedy weeks weeps weigh weird welch welds wells welsh wench wetly whack whale wharf wheat wheel whelp where which whiff while whims whine whiny whirl whisk white whole whoop whose widen wider widow width wield wilds wiles wilts wimpy wince winch winds windy wines wings winks wiped wiper wipes wired wires wiser wisps wispy witch witty wives woken woman wombs women woods woody wooed wooly words wordy works world worms worry worse worst worth would wound woven wrack wraps wrath wreak wreck wrest wring wrist write writs wrong wrote wrung wryly
+  yacht yards yarns yeast yells yield yodel yogic yokel young yours youth yucca yummy
+  zebra zesty zonal zoned zones zooms
+
+  abroad absent absurd accent accept access accord accuse across action active actual adjust admire adopts advice affair affect afford afraid agency agenda almost always amount animal annual answer anyone appeal appear arcade around arrest arrive artist aspect assess assign assist assume assure attach attack attend author autumn
+  backup ballot bamboo banana banner barely barrel basket battle beacon beauty become before behalf behind belief belong beside better beyond bottle bottom bounce branch breach breath breeze bridge bright broken bronze bubble bucket budget buffet bullet bundle burden bureau butter button
+  cactus camera campus cancel cancer cannon canvas canyon carbon career carpet carrot casino castle casual caught cattle causal caveat cement census center cereal chance change charge cheese cherry chosen church cinema circle circus citrus client climax closed closer clumsy coarse coffee collar colony column combat comedy coming commit common compel comply copper corner cotton county couple course cousin cradle create credit crisis critic cruise crunch custom
+  damage dancer danger dealer debate debris decade decent decide defeat defend define degree demand depart depend depict deploy deputy desert design desire detail detect device devise devote dialog dinner direct doctor dollar domain donate double dragon drawer driven driver during
+  easily editor eighty eleven emerge emotion employ enable ending energy engage engine enough ensure entire entity equity escape estate ethnic evolve exceed except excess excite excuse expand expect expert export extend extent
+  fabric facade facing factor fallen family famous farmer father fellow female figure filter finger finish fiscal flavor flight flower flying follow forbid forest forget formal format former fossil foster fought fourth freeze french frozen future
+  gadget galaxy garage garden garlic gather gender gentle gifted global golden gospel ground growth guilty guitar
+  handle happen harbor hardly hazard health hearty heaven height helmet hidden holder honest hunger hungry hunter
+  ignore impact import impose income indeed indoor infant inform injury inside insist insult intend intent invade invent invest invite island itself
+  jacket jersey jockey joined jungle junior justice
+  kidney killer kindly knight
+  ladder lately latest latter launch lawyer leader league legacy length lesson letter likely linear liquid listen little lively living locate lonely longer losing loudly lovely lowest lumber luxury
+  magnet mainly making manage manner manual marble margin marine market master matter meadow medium member memory mental mentor merger method middle mighty mining minute mirror mobile modern modest modify moment monkey mother motion muscle museum mutual myself
+  narrow nation native nature nearby nearly needle nephew nobody normal notice notify notion novice number
+  object obtain occupy office offset online oppose option orange origin outfit output oxygen
+  palace parade parent parish partly pastor patent patrol pencil people pepper period permit person phrase pillow pirate planet plasma plenty pocket poetry police policy polish portal poster potato powder prayer prefer prefix prince prison profit prompt proper proven public purple pursue puzzle
+  rabbit random rarely rather rating reader really reason recall recent recipe record reduce reform refuse regard region regret reject relate relief remain remedy remote remove render rental repair repeat replay report rescue resist resort result retail retire return reveal review reward ribbon rocket rubber ruling runner
+  sacred saddle safely safety salary salmon sample saving scared scheme school screen script search season second secret sector secure seldom select seller senior sensor series sermon server settle severe shadow should shovel signal silent silver simple simply singer single sister slight slogan smooth soccer social socket sodium solely source speech spirit splash spoken spread spring sprint square stable stairs statue status steady stolen strain stream street stress strict strike string strive strong struck studio stupid submit subtle suburb sudden suffer summer summit sunset supply surely survey switch symbol system
+  tackle talent target taught temple tender tennis thanks theory thirty though thread threat throne thrown ticket tissue tongue toward travel treaty tribal tripod trying tunnel twelve twenty typing
+  unable unfold unfair unique united unless unlike unlock unpaid update upbeat urgent useful valley varied vendor verbal verify versus vessel victim victor viewer virtue vision visual volume
+  wander wealth weapon weekly weight window winter wisdom within wonder wooden worker worthy writer
+  yellow zodiac
+  `;
+
+  const DICT = new Set(RAW.toUpperCase().split(/\s+/).filter(w => w.length >= 3));
+
+  /* ============================== BUILT-IN MEANINGS ============================== */
+  const MEANINGS = {
+    ACE:"A playing card with a single pip; a person who excels.",
+    ACT:"To do something; a deed or a division of a play.",
+    ADD:"To join something to increase the number or amount.",
+    AGE:"The length of time something or someone has existed.",
+    AGO:"Before the present time.",
+    AID:"Help or support given to someone.",
+    AIM:"A purpose, intention, or the pointing of a weapon.",
+    AIR:"The invisible mixture of gases that surrounds the earth.",
+    ALE:"A pale beer brewed without hops.",
+    ALL:"The whole quantity or extent of something.",
+    AND:"A word used to connect words of the same kind.",
+    ANT:"A small insect that lives in organised colonies.",
+    ANY:"One or some, no matter which.",
+    APE:"A large tailless primate such as a chimpanzee.",
+    APT:"Appropriate or suitable in the circumstances.",
+    ARC:"A curved line or the path of a curve.",
+    ARE:"Present plural form of the verb 'be'.",
+    ARK:"A large boat; a chest or box.",
+    ARM:"An upper limb of the body; a weapon.",
+    ART:"Creative human skill and the works it produces.",
+    ASH:"The powdery residue left after something burns.",
+    ASK:"To request an answer or information.",
+    ATE:"Past tense of eat.",
+    AWE:"A feeling of reverential wonder or respect.",
+    AXE:"A tool with a heavy blade for chopping wood.",
+    BAD:"Of poor quality; wicked or harmful.",
+    BAG:"A flexible container with an opening at the top.",
+    BAN:"An official prohibition.",
+    BAR:"A long rigid piece of material; a pub.",
+    BAT:"A club used for hitting; a flying mammal.",
+    BAY:"A broad curved inlet of the sea.",
+    BED:"A piece of furniture for sleeping on.",
+    BEE:"A buzzing insect that makes honey.",
+    BEG:"To ask earnestly for something.",
+    BET:"To risk money on the outcome of an event.",
+    BID:"To offer a price for something.",
+    BIG:"Of great size or importance.",
+    BIN:"A container for storing or throwing away things.",
+    BIT:"A small piece or quantity.",
+    BOW:"A weapon for shooting arrows; to bend forward.",
+    BOX:"A container with flat sides and a lid.",
+    BOY:"A male child or young man.",
+    BUD:"An undeveloped shoot or flower on a plant.",
+    BUG:"A small insect; a fault in a computer program.",
+    BUN:"A small round bread roll.",
+    BUS:"A large road vehicle carrying many passengers.",
+    BUT:"A word used to introduce a contrast.",
+    BUY:"To obtain something by paying for it.",
+    CAB:"A taxi; the driver's compartment of a truck.",
+    CAN:"To be able to; a metal container.",
+    CAP:"A soft flat hat; a lid or cover.",
+    CAR:"A road vehicle with four wheels and an engine.",
+    CAT:"A small domesticated carnivorous mammal.",
+    COW:"A mature female of cattle.",
+    CRY:"To shed tears; to shout out.",
+    CUB:"A young fox, bear, or lion.",
+    CUP:"A small open container used for drinking.",
+    CUT:"To divide or wound with a sharp edge.",
+    DAD:"A father.",
+    DAY:"A period of twenty-four hours.",
+    DIG:"To break up and move earth.",
+    DIM:"Not bright; faint.",
+    DIP:"To put something briefly into liquid.",
+    DOG:"A domesticated carnivorous mammal kept as a pet.",
+    DOT:"A small round mark.",
+    DRY:"Free from moisture or liquid.",
+    DUE:"Expected at a particular time; owed.",
+    DUG:"Past tense of dig.",
+    EAR:"The organ of hearing.",
+    EAT:"To take food into the body.",
+    EGG:"An oval reproductive body laid by birds.",
+    ELF:"A small mythical being with pointed ears.",
+    ELK:"A large deer with broad antlers.",
+    END:"The final part of something.",
+    ERA:"A long and distinct period of history.",
+    EVE:"The day or evening before an event.",
+    EYE:"The organ of sight.",
+    FAN:"A device for creating airflow; an admirer.",
+    FAR:"At a great distance.",
+    FAT:"Having much body fat; grease from animals.",
+    FED:"Past tense of feed.",
+    FEW:"A small number of things.",
+    FIG:"A soft sweet fruit with many seeds.",
+    FIN:"A flattened limb that helps a fish swim.",
+    FIT:"In good health; of the right size.",
+    FIX:"To repair something; to fasten it in place.",
+    FLY:"To move through the air; a small winged insect.",
+    FOG:"A cloud of water droplets close to the ground.",
+    FOR:"Intended to be given to or used by.",
+    FOX:"A wild canine with a pointed muzzle and bushy tail.",
+    FRY:"To cook food in hot fat or oil.",
+    FUN:"Enjoyment and light-hearted amusement.",
+    FUR:"The thick hairy coat of a mammal.",
+    GAP:"An unfilled space or interval.",
+    GAS:"A state of matter that expands freely to fill space.",
+    GEM:"A precious or semi-precious stone.",
+    GET:"To obtain or receive something.",
+    GUM:"The firm tissue that surrounds the teeth.",
+    GUN:"A weapon that fires bullets or shells.",
+    GUT:"The stomach or intestine.",
+    GUY:"A man; also a rope used to steady something.",
+    GYM:"A place equipped for physical exercise.",
+    HAD:"Past tense of have.",
+    HAT:"A covering worn on the head.",
+    HEN:"A female chicken.",
+    HER:"Belonging to or associated with a female.",
+    HEW:"To chop or cut something with an axe.",
+    HID:"Past tense of hide.",
+    HIM:"The objective form of the pronoun 'he'.",
+    HIP:"The joint at the top of the leg.",
+    HIS:"Belonging to or associated with a male.",
+    HIT:"To strike something with force.",
+    HOG:"A domesticated pig.",
+    HOP:"To jump on one leg; a short jump.",
+    HOT:"Having a high temperature.",
+    HOW:"In what way or by what means.",
+    HUB:"The central part of a wheel or a centre of activity.",
+    HUE:"A colour or shade.",
+    HUG:"To hold someone closely in the arms.",
+    HUM:"To make a low steady continuous sound.",
+    HUT:"A small simple shelter.",
+    ICE:"Frozen water.",
+    ICY:"Covered with ice; very cold.",
+    ILL:"Not in good health.",
+    INK:"A coloured fluid used for writing or printing.",
+    INN:"A small hotel or pub.",
+    ION:"An atom or molecule with an electric charge.",
+    ITS:"Belonging to or associated with a thing.",
+    IVY:"A climbing evergreen plant.",
+    JAM:"A fruit preserve; a blockage or squeeze.",
+    JAR:"A cylindrical glass container.",
+    JAW:"The bone that holds the lower teeth.",
+    JET:"A fast aircraft; a stream of liquid or gas.",
+    JOB:"A paid position of employment; a task.",
+    JOG:"To run at a slow steady pace.",
+    JOY:"A feeling of great happiness.",
+    JUG:"A large container for holding liquids.",
+    KEY:"A small metal instrument for opening a lock.",
+    KID:"A child; a young goat.",
+    KIN:"A person's relatives.",
+    KIT:"A set of parts or tools for a purpose.",
+    LAB:"A laboratory.",
+    LAD:"A boy or young man.",
+    LAP:"The flat area of the thighs when sitting.",
+    LAW:"A rule established by authority and enforced.",
+    LAY:"To put something down flat.",
+    LED:"Past tense of lead; a light-emitting diode.",
+    LEG:"A limb used for walking or supporting the body.",
+    LET:"To allow something to happen.",
+    LID:"A removable cover for a container.",
+    LIE:"To recline; to say something untrue.",
+    LIP:"Either of the two fleshy edges of the mouth.",
+    LIT:"Past tense of light; illuminated.",
+    LOG:"A thick piece of cut timber.",
+    LOT:"A large amount or a piece of land.",
+    LOW:"Close to the ground; not high.",
+    MAD:"Insane; very angry.",
+    MAN:"An adult male human.",
+    MAP:"A diagram representing an area of land.",
+    MAT:"A piece of material laid on a floor.",
+    MAY:"A word expressing possibility or permission.",
+    MEN:"Plural of man.",
+    MET:"Past tense of meet.",
+    MID:"In the middle of.",
+    MIX:"To combine two or more things together.",
+    MOB:"A large disorderly crowd.",
+    MOD:"A modification, especially of a game.",
+    MOM:"A mother.",
+    MOP:"A tool with a sponge for washing floors.",
+    MUD:"Wet sticky earth.",
+    MUG:"A large cup with a handle.",
+    NAP:"A short sleep, especially during the day.",
+    NET:"An open-meshed material used for catching things.",
+    NEW:"Recently made or discovered.",
+    NIL:"Nothing; zero.",
+    NIP:"To pinch or bite quickly.",
+    NOD:"To lower and raise the head in agreement.",
+    NOR:"A word used to introduce a further negative.",
+    NOT:"A word expressing negation.",
+    NOW:"At the present time.",
+    NUN:"A woman who is a member of a religious order.",
+    NUT:"A hard-shelled fruit; a metal fastener.",
+    OAK:"A large tree with hard wood and acorns.",
+    OAR:"A pole with a blade used for rowing a boat.",
+    ODD:"Unusual; not divisible by two.",
+    OFF:"Away from a place or position.",
+    OIL:"A thick slippery liquid.",
+    OLD:"Having lived or existed for a long time.",
+    ONE:"The number 1.",
+    OPT:"To make a choice between alternatives.",
+    ORB:"A spherical object or shape.",
+    ORE:"Rock containing metal that can be extracted.",
+    OUR:"Belonging to or associated with us.",
+    OUT:"Away from the inside of a place.",
+    OWE:"To be under an obligation to pay someone.",
+    OWL:"A nocturnal bird of prey with large eyes.",
+    OWN:"To possess something.",
+    PAD:"A thick piece of soft material; a notepad.",
+    PAN:"A metal container used for cooking.",
+    PAR:"The standard score for a hole in golf.",
+    PAT:"A light gentle tap.",
+    PAW:"The foot of an animal such as a dog or cat.",
+    PAY:"To give money in exchange for something.",
+    PEA:"A small round green seed eaten as a vegetable.",
+    PEN:"An instrument for writing with ink.",
+    PET:"A domesticated animal kept for companionship.",
+    PIE:"A baked dish of pastry with a filling.",
+    PIG:"A domesticated swine.",
+    PIN:"A thin piece of metal used for fastening.",
+    PIT:"A deep hole in the ground.",
+    PLY:"To work steadily at a trade; a layer of wood.",
+    POD:"A long seed case, as on a pea plant.",
+    POP:"To make a small explosive sound.",
+    POT:"A round container used for cooking.",
+    PRO:"A professional; in favour of something.",
+    PRY:"To enquire impertinently into someone's affairs.",
+    PUB:"A place where alcoholic drinks are sold.",
+    PUP:"A young dog.",
+    PUT:"To place something in a position.",
+    RAG:"A piece of old torn cloth.",
+    RAM:"A male sheep; to push forcefully.",
+    RAN:"Past tense of run.",
+    RAT:"A long-tailed rodent larger than a mouse.",
+    RAW:"Uncooked; in a natural unprocessed state.",
+    RAY:"A narrow beam of light or energy.",
+    RED:"The colour of blood or a ripe tomato.",
+    REF:"A referee or reference.",
+    RIB:"A curved bone of the chest.",
+    RID:"To free someone or something from a problem.",
+    RIG:"To fit out a ship; to manipulate dishonestly.",
+    RIM:"The outer edge of a circular object.",
+    RIP:"To tear something quickly and roughly.",
+    ROB:"To take property unlawfully from someone.",
+    ROD:"A thin straight bar of wood or metal.",
+    ROT:"To decay or go bad.",
+    ROW:"A line of things; to propel a boat with oars.",
+    RUB:"To move something while pressing against it.",
+    RUG:"A floor covering made of thick material.",
+    RUN:"To move quickly on foot.",
+    RYE:"A cereal grain used for bread and whisky.",
+    SAD:"Feeling or showing unhappiness.",
+    SAG:"To sink downwards under weight.",
+    SAP:"The fluid that circulates in a plant.",
+    SAT:"Past tense of sit.",
+    SAW:"A tool with a toothed blade for cutting.",
+    SAY:"To speak words.",
+    SEA:"The salt water that covers most of the earth.",
+    SEE:"To perceive with the eyes.",
+    SET:"To put something in a specified place.",
+    SEW:"To join or repair with thread and a needle.",
+    SHE:"The female pronoun.",
+    SHY:"Nervous or timid in the company of others.",
+    SIP:"To drink in small mouthfuls.",
+    SIR:"A polite form of address for a man.",
+    SIT:"To rest with the body supported on the buttocks.",
+    SIX:"The number 6.",
+    SKI:"A long narrow board used for gliding on snow.",
+    SKY:"The atmosphere seen from the earth.",
+    SLY:"Cunning and deceitful.",
+    SOB:"To weep noisily with short breaths.",
+    SOD:"A piece of turf.",
+    SON:"A male child or person in relation to parents.",
+    SOW:"To plant seed by scattering it on the ground.",
+    SOY:"A bean used to make food products.",
+    SPA:"A place offering relaxation and bathing.",
+    SPY:"A person who secretly collects information.",
+    SUB:"A substitute; a long sandwich.",
+    SUE:"To bring a legal action against someone.",
+    SUM:"The total amount resulting from addition.",
+    SUN:"The star at the centre of our solar system.",
+    SUP:"To eat the evening meal.",
+    TAB:"A small flap; a bill in a restaurant.",
+    TAD:"A small amount.",
+    TAG:"A label attached to something.",
+    TAN:"A brown colour; to darken the skin in the sun.",
+    TAP:"To strike lightly; a device controlling water flow.",
+    TAR:"A dark sticky substance.",
+    TAX:"A compulsory payment to the government.",
+    TEA:"A hot drink made by infusing dried leaves.",
+    TEN:"The number 10.",
+    THE:"The definite article.",
+    TIE:"To fasten with a knot; a necktie.",
+    TIN:"A silvery-white metal.",
+    TIP:"The pointed end; a gratuity; a helpful hint.",
+    TOE:"Any of the digits of the foot.",
+    TON:"A unit of weight equal to 2,000 or 2,240 pounds.",
+    TOO:"Also; to an excessive degree.",
+    TOP:"The highest point or part.",
+    TOT:"A very young child.",
+    TOW:"To pull something along behind.",
+    TOY:"An object for children to play with.",
+    TRY:"To make an attempt.",
+    TUB:"A large open container for water.",
+    TUG:"To pull something hard.",
+    TWO:"The number 2.",
+    URN:"A tall rounded container, often for ashes.",
+    USE:"To employ something for a purpose.",
+    VAN:"A covered vehicle for transporting goods.",
+    VAT:"A large tank for holding liquids.",
+    VET:"A veterinary surgeon; to examine carefully.",
+    VIA:"By way of; through.",
+    VIE:"To compete eagerly for something.",
+    VOW:"A solemn promise.",
+    WAD:"A small mass of soft material.",
+    WAG:"To move from side to side.",
+    WAR:"Armed conflict between nations or groups.",
+    WAS:"Past tense of be.",
+    WAX:"A solid fatty substance used for candles.",
+    WAY:"A method or a route from one place to another.",
+    WEB:"A network of fine threads spun by a spider.",
+    WED:"To marry someone.",
+    WEE:"Very small.",
+    WET:"Covered or saturated with liquid.",
+    WHO:"Which person.",
+    WHY:"For what reason.",
+    WIG:"Artificial hair worn on the head.",
+    WIN:"To be victorious in a contest.",
+    WIT:"Intelligence and quick humour.",
+    WOE:"Great sorrow or distress.",
+    WOK:"A bowl-shaped frying pan used in Asian cooking.",
+    WON:"Past tense of win.",
+    WOO:"To seek the affection of someone.",
+    WOW:"An exclamation of astonishment.",
+    WRY:"Using dry mocking humour.",
+    YAK:"A long-haired ox of central Asia.",
+    YAM:"An edible tuberous root.",
+    YAP:"To bark sharply.",
+    YAW:"To veer off course.",
+    YEA:"An old word for yes.",
+    YEN:"The currency of Japan; a strong desire.",
+    YES:"A word expressing agreement.",
+    YET:"Up to now; nevertheless.",
+    YEW:"An evergreen tree with dark green needles.",
+    YIP:"A sharp high-pitched bark.",
+    YOU:"The person or people being addressed.",
+    ZAP:"To destroy or hit suddenly.",
+    ZEN:"A school of Buddhism emphasising meditation.",
+    ZIP:"To fasten with a zip; to move quickly.",
+    ZOO:"A place where wild animals are kept for public display.",
+    TIME:"The continued progress of existence and events.",
+    WORD:"A single unit of language that has meaning.",
+    GAME:"An activity played for entertainment or competition.",
+    MIND:"The seat of consciousness and thought.",
+    LIFE:"The condition that distinguishes living things.",
+    HAND:"The end part of the arm beyond the wrist.",
+    FIRE:"The process of burning that gives heat and light.",
+    LAND:"The solid part of the earth's surface.",
+    RAIN:"Water falling from clouds in drops.",
+    STAR:"A luminous ball of gas in space.",
+    MOON:"The natural satellite that orbits the earth.",
+    WIND:"Air moving naturally across the earth.",
+    GOLD:"A precious yellow metal used for coins and jewellery.",
+    WOLF:"A wild animal related to the dog.",
+    BEAR:"A large heavy mammal with thick fur.",
+    DEER:"A hoofed animal, the male often having antlers.",
+    FISH:"A cold-blooded animal that lives in water.",
+    BIRD:"A warm-blooded animal with feathers and wings.",
+    TREE:"A tall plant with a woody trunk and branches.",
+    ROCK:"A hard solid mass of mineral material.",
+    SAND:"Loose granular material found on beaches.",
+    LAKE:"A large body of water surrounded by land.",
+    HILL:"A naturally raised area of land, lower than a mountain.",
+    CAVE:"A large natural hollow in a hillside or cliff.",
+    ROAD:"A wide way leading from one place to another.",
+    HOME:"The place where a person lives.",
+    LOVE:"A deep feeling of affection for someone.",
+    HOPE:"A feeling of expectation and desire.",
+    FEAR:"An unpleasant emotion caused by danger.",
+    DARK:"With little or no light.",
+    COLD:"Of a low temperature.",
+    WARM:"At a comfortably high temperature.",
+    FAST:"Moving or capable of moving at high speed.",
+    SLOW:"Moving or operating at a low speed.",
+    KIND:"Caring and generous in nature.",
+    BRAVE:"Ready to face danger or pain.",
+    QUIET:"Making little or no noise.",
+    LOUD:"Producing much noise.",
+    SWEET:"Having a taste like sugar.",
+    SHARP:"Having a fine edge that can cut.",
+    ROUND:"Shaped like a circle or sphere.",
+    CLEAN:"Free from dirt or marks.",
+    HAPPY:"Feeling or showing pleasure.",
+    ANGRY:"Feeling strong displeasure.",
+    TIRED:"In need of rest or sleep.",
+    YOUNG:"Having lived for only a short time.",
+    FRESH:"Recently made or obtained; not stale.",
+    GREEN:"The colour of grass and leaves.",
+    BLUE:"The colour of a clear sky.",
+    BLACK:"The darkest colour, absorbing all light.",
+    WHITE:"The lightest colour, reflecting all light.",
+    BROWN:"The colour of earth or wood.",
+    ORANGE:"A round citrus fruit; a colour between red and yellow.",
+    PURPLE:"A colour made by mixing red and blue.",
+    SILVER:"A shiny greyish-white precious metal.",
+    COPPER:"A reddish-brown metal used for wire and coins.",
+    WATER:"A clear liquid essential for all life.",
+    BREAD:"A staple food made from flour and water.",
+    APPLE:"A round firm fruit with red or green skin.",
+    LEMON:"A yellow citrus fruit with a sour taste.",
+    PEACH:"A soft round fruit with fuzzy skin.",
+    GRAPE:"A small round fruit growing in bunches.",
+    ONION:"A bulbous vegetable with a strong smell.",
+    SUGAR:"A sweet crystalline substance from plants.",
+    HONEY:"A sweet sticky substance made by bees.",
+    CHEESE:"A food made from pressed curdled milk.",
+    BUTTER:"A soft yellow fat made from cream.",
+    COFFEE:"A hot drink made from roasted beans.",
+    MUSIC:"Sounds arranged in a pleasing or expressive way.",
+    DANCE:"To move rhythmically, usually to music.",
+    STORY:"An account of imaginary or real events.",
+    DREAM:"A series of images experienced during sleep.",
+    MAGIC:"A supposed supernatural power.",
+    PEACE:"Freedom from disturbance or war.",
+    TRUTH:"That which is true or in accordance with fact.",
+    POWER:"The ability to do something or influence others.",
+    LIGHT:"The natural agent that makes things visible.",
+    STONE:"A hard solid mineral substance.",
+    CLOUD:"A visible mass of water droplets in the sky.",
+    STORM:"A violent disturbance of the atmosphere.",
+    OCEAN:"A very large expanse of sea.",
+    RIVER:"A large natural stream of water flowing to the sea.",
+    FIELD:"An open area of land used for growing crops.",
+    HOUSE:"A building for people to live in.",
+    CHAIR:"A seat with a back for one person.",
+    TABLE:"Furniture with a flat top supported by legs.",
+    CLOCK:"An instrument for measuring and showing time.",
+    PHONE:"A device for transmitting voice over distance."
+  };
+
+  /* ============================== CONSTANTS ============================== */
+  const COLS = 7, ROWS = 12;
+  const VOWELS = new Set(['A', 'E', 'I', 'O', 'U']);
+  const FREQ = { A:9, B:2, C:3, D:4, E:12, F:2, G:3, H:3, I:9, J:1, K:1, L:4, M:3,
+                 N:6, O:8, P:2, Q:1, R:6, S:6, T:7, U:4, V:2, W:2, X:1, Y:2, Z:1 };
+  const BAG_BASE = [];
+  for (const k in FREQ) for (let i = 0; i < FREQ[k]; i++) BAG_BASE.push(k);
+
+  const LOCK_DELAY = 380;
+
+  /* ============================== SOUND ============================== */
+  const Sound = (() => {
+    let ac = null, muted = false;
+    function ctx() {
+      if (!ac) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        try { ac = new AC(); } catch (e) { return null; }
+      }
+      if (ac.state === 'suspended') ac.resume();
+      return ac;
+    }
+    function beep(freq, dur, type = 'sine', vol = 0.12, delay = 0, slide = null) {
+      if (muted) return;
+      const c = ctx(); if (!c) return;
+      const t = c.currentTime + delay;
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.009);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(t); o.stop(t + dur + 0.04);
+    }
+    return {
+      unlock() { ctx(); },
+      setMuted(m) { muted = m; },
+      isMuted() { return muted; },
+      move()  { beep(340, 0.045, 'square', 0.045); },
+      swap()  { beep(520, 0.07, 'triangle', 0.08); beep(400, 0.07, 'triangle', 0.07, 0.055); },
+      lock()  { beep(130, 0.15, 'triangle', 0.16, 0, 72); beep(70, 0.1, 'sine', 0.1, 0.01); },
+      clear(n, cascade) {
+        const base = 440 * Math.pow(1.0595, Math.min(cascade, 8) * 2);
+        const steps = Math.max(3, Math.min(n, 7));
+        for (let i = 0; i < steps; i++) {
+          beep(base * Math.pow(2, (i * 2) / 12), 0.17, 'sine', 0.13, i * 0.055);
+        }
+        beep(base * 2, 0.28, 'triangle', 0.06, steps * 0.055);
+      },
+      levelUp() { [523, 659, 784, 1046].forEach((f, i) => beep(f, 0.2, 'triangle', 0.12, i * 0.085)); },
+      over()    { [392, 330, 262, 196].forEach((f, i) => beep(f, 0.32, 'sawtooth', 0.09, i * 0.13)); },
+      err()     { beep(150, 0.14, 'square', 0.09); }
+    };
+  })();
+
+  /* ============================== DOM ============================== */
+  const gridEl    = document.getElementById('grid');
+  const pieceEl   = document.getElementById('piece');
+  const pieceBlk  = pieceEl.firstElementChild;
+  const popupEl   = document.getElementById('popup');
+  const overlay   = document.getElementById('overlay');
+  const finalEl   = document.getElementById('finalScore');
+  const scoreEl   = document.getElementById('score');
+  const levelEl   = document.getElementById('level');
+  const wordsEl   = document.getElementById('words');
+  const queueEl   = document.getElementById('queue');
+  const defsEl    = document.getElementById('defs');
+  const muteBtn   = document.getElementById('muteBtn');
+
+  const cellEls = [];
+  for (let r = 0; r < ROWS; r++) {
+    cellEls[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const blk = document.createElement('div');
+      blk.className = 'block';
+      cell.appendChild(blk);
+      gridEl.appendChild(cell);
+      cellEls[r][c] = blk;
+    }
+  }
+
+  /* ============================== STATE ============================== */
+  let grid, piece, queue, score, level, wordsCleared;
+  let paused = false, gameOver = false, busy = false;
+  let softDrop = false, lockTimer = 0;
+  let bag = [];
+  let lastT = 0;
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  function drawLetter() {
+    if (bag.length < 4) bag = shuffle(BAG_BASE.slice());
+    return bag.pop();
+  }
+
+  /* ============================== BOARD HELPERS ============================== */
+  function colHeight(c) {
+    let h = 0;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (grid[r][c]) h++; else break;
+    }
+    return h;
+  }
+  function landRow(c) { return ROWS - 1 - colHeight(c); }
+
+  function applyGravity() {
+    for (let c = 0; c < COLS; c++) {
+      const items = [];
+      for (let r = 0; r < ROWS; r++) if (grid[r][c]) items.push(grid[r][c]);
+      let i = items.length - 1;
+      for (let r = ROWS - 1; r >= 0; r--, i--) {
+        grid[r][c] = i >= 0 ? items[i] : null;
+      }
+    }
+  }
+
+  /* ============================== WORD FINDING ============================== */
+  const DIRS = [
+    [0, 1,  'h'],   // horizontal
+    [1, 0,  'v'],   // vertical
+    [1, 1,  'd'],   // diagonal down-right
+    [1, -1, 'd']    // diagonal down-left
+  ];
+
+  function findWordsInRun(run, dir) {
+    const out = [];
+    const used = new Array(run.length).fill(false);
+    const cands = [];
+    for (let i = 0; i < run.length; i++) {
+      for (let j = i + 3; j <= run.length; j++) {
+        let s = '';
+        for (let k = i; k < j; k++) s += run[k][2];
+        if (DICT.has(s)) cands.push({ i, j, s });
+      }
+    }
+    cands.sort((a, b) => (b.j - b.i) - (a.j - a.i));
+    for (const cd of cands) {
+      let ok = true;
+      for (let k = cd.i; k < cd.j; k++) if (used[k]) { ok = false; break; }
+      if (!ok) continue;
+      const cells = [];
+      for (let k = cd.i; k < cd.j; k++) { used[k] = true; cells.push([run[k][0], run[k][1]]); }
+      out.push({ word: cd.s, cells, dir });
+    }
+    return out;
+  }
+
+  function findWords() {
+    const found = [];
+    for (const [dr, dc, dir] of DIRS) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (!grid[r][c]) continue;
+          // only start a run if the previous cell in this direction is empty/out of bounds
+          const pr = r - dr, pc = c - dc;
+          if (pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && grid[pr][pc]) continue;
+
+          const run = [];
+          let rr = r, cc = c;
+          while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && grid[rr][cc]) {
+            run.push([rr, cc, grid[rr][cc].ch]);
+            rr += dr; cc += dc;
+          }
+          if (run.length >= 3) found.push(...findWordsInRun(run, dir));
+        }
+      }
+    }
+    return found;
+  }
+
+  /* ============================== MEANINGS ============================== */
+  const defCache = new Map();
+  try {
+    const stored = JSON.parse(localStorage.getItem('wt_defs_v1') || '{}');
+    for (const k in stored) if (stored[k]) defCache.set(k, stored[k]);
+  } catch (e) { /* ignore */ }
+
+  let saveTimer = null;
+  function persistDefs() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        const obj = {};
+        defCache.forEach((v, k) => { if (v) obj[k] = v; });
+        localStorage.setItem('wt_defs_v1', JSON.stringify(obj));
+      } catch (e) { /* ignore quota errors */ }
+    }, 400);
+  }
+
+  const pending = new Map();
+
+  function lookup(word) {
+    if (defCache.has(word)) return Promise.resolve(defCache.get(word));
+    if (pending.has(word)) return pending.get(word);
+
+    const builtin = MEANINGS[word];
+    if (builtin) {
+      const v = { text: builtin, pos: '' };
+      defCache.set(word, v); persistDefs();
+      return Promise.resolve(v);
+    }
+
+    const p = fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + word.toLowerCase())
+      .then(res => { if (!res.ok) throw new Error('nf'); return res.json(); })
+      .then(data => {
+        const m = data && data[0] && data[0].meanings && data[0].meanings[0];
+        const d = m && m.definitions && m.definitions[0] && m.definitions[0].definition;
+        if (!d) throw new Error('nd');
+        const v = { text: d.charAt(0).toUpperCase() + d.slice(1), pos: m.partOfSpeech || '' };
+        defCache.set(word, v); persistDefs();
+        return v;
+      })
+      .catch(() => null)
+      .finally(() => { pending.delete(word); });
+
+    pending.set(word, p);
+    return p;
+  }
+
+  function addDefinition(word, dir) {
+    const empty = defsEl.querySelector('.empty-defs');
+    if (empty) empty.remove();
+
+    const entry = document.createElement('div');
+    entry.className = 'def-entry ' + dir;
+
+    const head = document.createElement('div');
+    head.className = 'def-head';
+    const chip = document.createElement('span');
+    chip.className = 'wchip ' + dir;
+    chip.textContent = word;
+    head.appendChild(chip);
+    entry.appendChild(head);
+
+    const text = document.createElement('div');
+    text.className = 'def-text';
+    text.textContent = 'Looking up…';
+    entry.appendChild(text);
+
+    defsEl.prepend(entry);
+    while (defsEl.children.length > 10) defsEl.lastElementChild.remove();
+
+    lookup(word).then(info => {
+      if (info) {
+        text.textContent = info.text;
+        if (info.pos) {
+          const pos = document.createElement('span');
+          pos.className = 'def-pos';
+          pos.textContent = info.pos;
+          head.appendChild(pos);
+        }
+      } else {
+        text.textContent = 'No definition available.';
+      }
+    });
+  }
+
+  /* ============================== RENDERING ============================== */
+  function render() {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const el = cellEls[r][c];
+        const v = grid[r][c];
+        if (v) {
+          el.textContent = v.ch;
+          let cls = 'block filled';
+          if (VOWELS.has(v.ch)) cls += ' vowel';
+          if (v.clearing) cls += ' clearing ' + v.clearing;
+          el.className = cls;
+        } else {
+          if (el.textContent !== '') el.textContent = '';
+          if (el.className !== 'block') el.className = 'block';
+        }
+      }
+    }
+  }
+
+  function updatePieceEl() {
+    if (!piece) { pieceEl.style.display = 'none'; return; }
+    pieceEl.style.display = 'block';
+    pieceEl.style.left = (piece.col / COLS * 100) + '%';
+    pieceEl.style.top = (piece.y / ROWS * 100) + '%';
+    pieceBlk.textContent = piece.ch;
+    pieceBlk.className = 'block' + (VOWELS.has(piece.ch) ? ' vowel' : '');
+  }
+
+  function renderQueue() {
+    queueEl.innerHTML = '';
+    for (const ch of queue) {
+      const t = document.createElement('div');
+      t.className = 'qtile' + (VOWELS.has(ch) ? ' vowel' : '');
+      t.textContent = ch;
+      queueEl.appendChild(t);
+    }
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = score;
+    levelEl.textContent = level;
+    wordsEl.textContent = wordsCleared;
+  }
+
+  function showPopup(found, gained, cascade) {
+    popupEl.innerHTML = '';
+    for (const f of found) {
+      const row = document.createElement('div');
+      row.className = 'word-row';
+      for (const ch of f.word) {
+        const s = document.createElement('span');
+        s.className = 'wcell ' + f.dir;
+        s.textContent = ch;
+        row.appendChild(s);
+      }
+      popupEl.appendChild(row);
+    }
+    const pts = document.createElement('div');
+    pts.className = 'pts';
+    pts.textContent = '+' + gained + (cascade > 0 ? '  ×' + (cascade + 1) : '');
+    popupEl.appendChild(pts);
+
+    popupEl.classList.remove('show');
+    void popupEl.offsetWidth;
+    popupEl.classList.add('show');
+  }
+
+  /* ============================== GAME FLOW ============================== */
+  function newGame() {
+    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    bag = shuffle(BAG_BASE.slice());
+    score = 0; level = 1; wordsCleared = 0;
+    paused = false; gameOver = false; busy = false;
+    softDrop = false; lockTimer = 0;
+    piece = null;
+    queue = [drawLetter(), drawLetter(), drawLetter()];
+    overlay.classList.add('hidden');
+    popupEl.classList.remove('show');
+    renderQueue();
+    updateHUD();
+    spawn();
+    render();
+    updatePieceEl();
+  }
+
+  function spawn() {
+    const order = [3, 2, 4, 1, 5, 0, 6];
+    let col = -1;
+    for (const c of order) if (landRow(c) >= 0) { col = c; break; }
+    if (col < 0) { endGame(); return; }
+
+    const ch = queue.shift();
+    queue.push(drawLetter());
+    piece = { ch, col, y: -1 };
+    lockTimer = 0;
+    softDrop = false;
+    renderQueue();
+  }
+
+  function lockPiece() {
+    if (!piece) return;
+    const r = Math.round(piece.y);
+    const c = piece.col;
+    const ch = piece.ch;
+    piece = null;
+
+    if (r < 0 || r >= ROWS || grid[r][c]) { endGame(); return; }
+
+    grid[r][c] = { ch };
+    busy = true;
+    Sound.lock();
+    render();
+    resolve(0);
+  }
+
+  function resolve(cascade) {
+    const found = findWords();
+    if (!found.length) {
+      busy = false;
+      if (!gameOver) { spawn(); updatePieceEl(); }
+      return;
+    }
+
+    let gained = 0;
+    let totalLetters = 0;
+    for (const f of found) {
+      gained += f.word.length * f.word.length * 10;
+      totalLetters += f.word.length;
+    }
+    gained *= (cascade + 1);
+
+    const prevLevel = level;
+    score += gained;
+    wordsCleared += found.length;
+    level = 1 + Math.floor(wordsCleared / 6);
+    updateHUD();
+
+    Sound.clear(totalLetters, cascade);
+    if (level > prevLevel) setTimeout(() => Sound.levelUp(), 260);
+
+    showPopup(found, gained, cascade);
+
+    // register meanings (one entry per word)
+    for (const f of found) addDefinition(f.word, f.dir);
+
+    const marked = [];
+    for (const f of found) {
+      for (const [r, c] of f.cells) {
+        if (grid[r][c]) { grid[r][c].clearing = f.dir; marked.push([r, c]); }
+      }
+    }
+    render();
+
+    setTimeout(() => {
+      for (const [r, c] of marked) grid[r][c] = null;
+      applyGravity();
+      render();
+      setTimeout(() => resolve(cascade + 1), 110);
+    }, 300);
+  }
+
+  function endGame() {
+    gameOver = true;
+    piece = null;
+    updatePieceEl();
+    finalEl.textContent = score;
+    overlay.classList.remove('hidden');
+    Sound.over();
+  }
+
+  /* ============================== ACTIONS ============================== */
+  function move(dx) {
+    if (busy || gameOver || paused || !piece) return;
+    const nc = piece.col + dx;
+    if (nc < 0 || nc >= COLS) return;
+    if (landRow(nc) < 0) return;
+    piece.col = nc;
+    const land = landRow(nc);
+    if (piece.y > land) piece.y = land;
+    lockTimer = 0;
+    Sound.move();
+    updatePieceEl();
+  }
+
+  function hardDrop() {
+    if (busy || gameOver || paused || !piece) return;
+    const land = landRow(piece.col);
+    if (land < 0) return;
+    piece.y = land;
+    lockPiece();
+  }
+
+  function swapLetter() {
+    if (busy || gameOver || paused || !piece) return;
+    const tmp = piece.ch;
+    piece.ch = queue[0];
+    queue[0] = tmp;
+    renderQueue();
+    updatePieceEl();
+    Sound.swap();
+  }
+
+  function togglePause() {
+    if (gameOver) return;
+    paused = !paused;
+  }
+
+  /* ============================== LOOP ============================== */
+  function loop(t) {
+    const dt = Math.min(60, t - lastT || 16);
+    lastT = t;
+
+    if (!paused && !gameOver && !busy && piece) {
+      const land = landRow(piece.col);
+      const dropMs = Math.max(95, 720 - (level - 1) * 58);
+      const speed = softDrop ? 1 / 38 : 1 / dropMs;
+
+      if (piece.y < land) {
+        piece.y = Math.min(land, piece.y + speed * dt);
+        lockTimer = 0;
+      } else {
+        piece.y = land;
+        lockTimer += dt;
+        if (lockTimer > LOCK_DELAY) lockPiece();
+      }
+      updatePieceEl();
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  /* ============================== INPUT ============================== */
+  document.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') { move(-1); e.preventDefault(); }
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') { move(1); e.preventDefault(); }
+    else if (k === 'ArrowDown') { softDrop = true; e.preventDefault(); }
+    else if (k === ' ') { hardDrop(); e.preventDefault(); }
+    else if (k === 's' || k === 'S') { swapLetter(); e.preventDefault(); }
+    else if (k === 'p' || k === 'P') { togglePause(); e.preventDefault(); }
+    else if (k === 'r' || k === 'R') { newGame(); e.preventDefault(); }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowDown') softDrop = false;
+  });
+
+  document.getElementById('restart').addEventListener('click', () => { Sound.unlock(); newGame(); });
+  document.getElementById('again').addEventListener('click', () => { Sound.unlock(); newGame(); });
+
+  muteBtn.addEventListener('click', () => {
+    Sound.unlock();
+    const m = !Sound.isMuted();
+    Sound.setMuted(m);
+    muteBtn.textContent = m ? '🔇' : '🔊';
+  });
+
+  // unlock audio on first interaction anywhere
+  const unlockOnce = () => { Sound.unlock(); window.removeEventListener('pointerdown', unlockOnce); window.removeEventListener('keydown', unlockOnce); };
+  window.addEventListener('pointerdown', unlockOnce);
+  window.addEventListener('keydown', unlockOnce);
+
+  // touch buttons
+  document.querySelectorAll('#touch button').forEach(btn => {
+    const act = btn.dataset.act;
+    const fire = (ev) => {
+      ev.preventDefault();
+      Sound.unlock();
+      if (act === 'left') move(-1);
+      else if (act === 'right') move(1);
+      else if (act === 'down') softDrop = true;
+      else if (act === 'drop') hardDrop();
+      else if (act === 'swap') swapLetter();
+    };
+    btn.addEventListener('touchstart', fire, { passive: false });
+    btn.addEventListener('mousedown', fire);
+    const stop = () => { if (act === 'down') softDrop = false; };
+    btn.addEventListener('touchend', stop, { passive: false });
+    btn.addEventListener('mouseup', stop);
+    btn.addEventListener('mouseleave', stop);
+  });
+
+  /* ============================== BOOT ============================== */
+  newGame();
+  requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(loop); });
+})();
+</script>
+</body>
+</html>
